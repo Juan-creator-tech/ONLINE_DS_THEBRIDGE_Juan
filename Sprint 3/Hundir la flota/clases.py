@@ -101,7 +101,129 @@ class Tablero:
                             self.tablero[nf, nc] = BORDE
 
     def mostrar_tablero(self, visible=False):
-        if visible:
-            print("\n".join(" ".join(row) for row in self.tablero))
-        else:
-            print("\n".join(" ".join(row) for row in self.disparos))
+        """
+        Muestra el tablero. Si visible=True, muestra los barcos, disparos y hundimientos.
+        Si visible=False, oculta los barcos no impactados, pero muestra los disparos realizados.
+        """
+        tablero_a_mostrar = self.tablero.copy()  # Crea una copia del tablero
+        for fila in range(DIMENSIONES_TABLERO):
+            for columna in range(DIMENSIONES_TABLERO):
+                if not visible and tablero_a_mostrar[fila, columna] == BARCO:
+                    # Oculta los barcos no impactados si el tablero no es visible
+                    tablero_a_mostrar[fila, columna] = AGUA
+                elif self.disparos[fila, columna] == FALLO:
+                    # Muestra los disparos fallidos como 'O'
+                    tablero_a_mostrar[fila, columna] = FALLO
+                elif self.disparos[fila, columna] == IMPACTO:
+                    # Muestra los impactos como '*'
+                    tablero_a_mostrar[fila, columna] = IMPACTO
+        # Imprime el tablero procesado
+        print("\n".join(" ".join(row) for row in tablero_a_mostrar))
+
+class DisparoMaquina:
+    def __init__(self, nivel):
+        self.nivel = nivel
+        self.impacto_previo = None  # Guarda la última coordenada con impacto
+        self.intentos_adyacentes = []  # Lista de coordenadas adyacentes a probar
+        self.disparos_realizados = set()  # Coordenadas ya disparadas
+        self.turnos_hasta_trampa = 3  # Para nivel difícil, cuenta disparos aleatorios
+
+    def disparar(self, jugador, dimensiones):
+        fila, columna = None, None
+    
+        if self.nivel == 1:  # Fácil
+            while True:
+                fila, columna = self.generar_coordenada_aleatoria()
+                if (fila, columna) not in self.disparos_realizados:
+                    break
+    
+        elif self.nivel in [2, 3]:  # Medio y Difícil comparten lógica de disparos dirigidos
+            # Nivel 3: Comprobar si es el turno "trampa"
+            if self.nivel == 3 and self.turnos_hasta_trampa == 0:
+                # Turno "trampa": Seleccionar una coordenada con un barco del jugador
+                for barco in jugador.barcos:
+                    for f, c in barco:
+                        if (f, c) not in self.disparos_realizados:
+                            fila, columna = f, c
+                            break
+                    if fila is not None and columna is not None:
+                        break
+                self.turnos_hasta_trampa = 3  # Reiniciar contador
+            else:
+                if self.nivel == 3:
+                    self.turnos_hasta_trampa -= 1
+    
+                # Disparos dirigidos basados en impactos previos
+                if self.impacto_previo:
+                    impactos = self.obtener_impactos_consecutivos()
+                    
+                    if len(impactos) >= 2:
+                        # Determinar alineación y disparar en los extremos
+                        alineacion = self.determinar_alineacion(impactos)
+                        if alineacion == "horizontal":
+                            fila = impactos[0][0]
+                            extremos = [(fila, impactos[0][1] - 1), (fila, impactos[-1][1] + 1)]
+                        elif alineacion == "vertical":
+                            columna = impactos[0][1]
+                            extremos = [(impactos[0][0] - 1, columna), (impactos[-1][0] + 1, columna)]
+                        
+                        # Elegir el primer extremo válido
+                        for f, c in extremos:
+                            if 0 <= f < dimensiones and 0 <= c < dimensiones and (f, c) not in self.disparos_realizados:
+                                fila, columna = f, c
+                                break
+    
+                    if fila is None or columna is None:
+                        # Si no hay alineación o extremos válidos, dispara adyacente
+                        if self.intentos_adyacentes:
+                            fila, columna = self.intentos_adyacentes.pop()
+                        else:
+                            self.intentos_adyacentes = self.generar_adyacentes(*self.impacto_previo, dimensiones)
+                            fila, columna = self.intentos_adyacentes.pop()
+                else:
+                    # Disparo aleatorio hasta impactar
+                    while True:
+                        fila, columna = self.generar_coordenada_aleatoria()
+                        if (fila, columna) not in self.disparos_realizados:
+                            break
+    
+        # Registra el disparo realizado
+        self.disparos_realizados.add((fila, columna))
+        return fila, columna
+    
+    def obtener_impactos_consecutivos(self):
+        # Devuelve las coordenadas de impactos consecutivos basados en self.disparos_realizados
+        impactos = [
+            (f, c) for f, c in self.disparos_realizados
+            if (f, c) in self.intentos_adyacentes or self.impacto_previo == (f, c)
+        ]
+        return sorted(impactos)
+    
+    def determinar_alineacion(self, impactos):
+        # Determina si los impactos están alineados horizontal o verticalmente
+        if all(f == impactos[0][0] for f, _ in impactos):
+            return "horizontal"
+        elif all(c == impactos[0][1] for _, c in impactos):
+            return "vertical"
+        return None
+
+    def registrar_impacto(self, fila, columna, impacto, hundido, dimensiones):
+        if impacto and not hundido:
+            self.impacto_previo = (fila, columna)
+            self.intentos_adyacentes = self.generar_adyacentes(fila, columna, dimensiones)
+        elif hundido:
+            self.impacto_previo = None
+            self.intentos_adyacentes = []
+
+    def generar_adyacentes(self, fila, columna, dimensiones):
+        adyacentes = [
+            (fila + 1, columna), (fila - 1, columna),
+            (fila, columna + 1), (fila, columna - 1)
+        ]
+        return [
+            (f, c) for f, c in adyacentes
+            if 0 <= f < dimensiones and 0 <= c < dimensiones
+        ]
+
+    def generar_coordenada_aleatoria(self):
+        return random.randint(0, DIMENSIONES_TABLERO-1), random.randint(0, DIMENSIONES_TABLERO-1)
