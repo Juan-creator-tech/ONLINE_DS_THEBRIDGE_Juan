@@ -274,3 +274,25 @@ def bubble_plot(df, col_x, col_y, col_size, scale = 1000):
     plt.show()
 
 
+def trivariant_analysis(df, directora, cat2, num1, group_size = 3, bins = "auto"):
+    col_directora = directora
+    col_1 = cat2
+    col_2 = num1
+    diccionario_multivariante = {}
+    for valor in df[col_directora].unique():
+        diccionario_multivariante[valor] = df.loc[df[col_directora] == valor,[col_2,col_1]] 
+    for valor,df_datos in diccionario_multivariante.items():
+        print(f"Respuesta {valor}:")
+        plot_grouped_histograms(df_datos,col_1,col_2, group_size= group_size, bins = bins)
+        
+
+def tricategorical_analysis(df, directora, otras, relativa = False, muestra_valores = False):
+    col_directora = directora
+    col_1 = otras[0]
+    col_2 = otras[1]
+    diccionario_multivariante = {}
+    for valor in df[col_directora].unique():
+        diccionario_multivariante[valor] = df.loc[df[col_directora] == valor,[col_2,col_1]] 
+    for valor,df_datos in diccionario_multivariante.items():
+        print(f"Respuesta {valor}:")
+        plot_categorical_relationship_fin(df_datos,col_2,col_1, relative_freq= relativa, show_values= muestra_valores)
